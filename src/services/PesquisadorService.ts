@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { appDataSource } from '../database/appDataSource.js';
 import Pesquisador from '../entities/Pesquisador.js';
 import { AppError } from '../errors/AppError.js';
@@ -20,11 +21,9 @@ class PesquisadorService {
     }
 
     public async create(data: Pesquisador): Promise<Pesquisador> {
+        
         const { nome, email, senha, matricula, titulacao, dataNascimento } = data;
 
-        if (!nome || !email || !senha || !matricula || !titulacao || !dataNascimento) {
-            throw new AppError(400, "Campos obrigatórios ausentes");
-        }
 
         const emailExiste = await this.pesquisadorRepository.findOneBy({ email });
         const matriculaExiste = await this.pesquisadorRepository.findOneBy({ matricula });
@@ -32,6 +31,8 @@ class PesquisadorService {
         if (emailExiste || matriculaExiste) {
             throw new AppError(400, "E-mail ou Matrícula já cadastrados");
         }
+
+        data.senha = await bcrypt.hash(senha, 10)
 
         const novoPesquisador = this.pesquisadorRepository.create(data);
         await this.pesquisadorRepository.save(novoPesquisador);

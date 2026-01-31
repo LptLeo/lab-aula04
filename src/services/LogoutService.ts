@@ -1,18 +1,34 @@
+import { jwtConfig } from "../config/jwt.config.js";
 import { appDataSource } from "../database/appDataSource.js";
 import RefreshToken from "../entities/RefreshToken.js";
+import jwt from 'jsonwebtoken'
 import { AppError } from "../errors/AppError.js";
 
-export class LogoutService {
+export default class LogoutService {
 
-    private refreshRepo =  appDataSource.getRepository(RefreshToken);
+    private repoRefresh = appDataSource.getRepository(RefreshToken);
 
-    async execute(jti: string) {
-        const session = await this.refreshRepo.findOne({
-            where: { jti }
-        })
-        if (!session) {
-            throw new AppError(404, "Sessão não encontrada");
+    async logout(refrestoken: string) {
+
+        try {
+            //
+            const decoded = jwt.verify(refrestoken, jwtConfig.refresh.secret)  as any;
+            await this.repoRefresh.update({ jti: decoded.jti }, { revoked: true })
+
+        } catch (error) {
+            throw new AppError(401, "Token inválido")
         }
-        await this.refreshRepo.remove(session);
+
+    }
+
+    async logoutAll(pesquisadorId: string) {
+        await this.repoRefresh.update(
+            {
+                pesquisador: { id: pesquisadorId},
+            },
+            {
+                revoked: true
+            }
+        )
     }
 }

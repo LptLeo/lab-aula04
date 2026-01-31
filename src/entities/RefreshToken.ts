@@ -1,25 +1,28 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  CreateDateColumn,
-} from "typeorm";
+import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import Pesquisador from "./Pesquisador.js";
 
-@Entity("refresh_tokens")
+@Entity("refreshtoken")
 export default class RefreshToken {
 
-  @PrimaryGeneratedColumn("uuid")
-  id: string;
+    @PrimaryGeneratedColumn("uuid")
+    id: string;
 
-  @Column({ type: "varchar", unique: true })
-  jti: string;
+    @Column({ type: "varchar" , nullable: false, length: 255})
+    jti: string;
 
-  @ManyToOne(() => Pesquisador, { onDelete: "CASCADE" })
-  pesquisador: Pesquisador;
+    @Column({ type: "varchar", nullable: false, length: 255 })
+    tokenhash: string;
 
-  @CreateDateColumn()
-  createdAt: Date;
-  
+    @Column({  type: 'timestamp', nullable: true })
+    expireIn: Date;
+
+    @Column({ default: false })
+    revoked:  boolean;
+
+    @ManyToOne(() => Pesquisador, { onDelete: 'CASCADE' })
+    pesquisador:  Pesquisador;
+
+    @CreateDateColumn()
+    createAt: Date;
+
 }

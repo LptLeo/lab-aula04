@@ -1,74 +1,96 @@
 import bcrypt from "bcryptjs";
 import { appDataSource } from "../database/appDataSource.js";
 import Pesquisador from "../entities/Pesquisador.js";
+import RefreshToken from "../entities/RefreshToken.js";
 import { AppError } from "../errors/AppError.js";
-import jwt from 'jsonwebtoken'
-import { jwtConfig } from "../config/jwt.config.js";
-import RefreshToken  from "../entities/RefreshToken.js";
 import { randomUUID } from "crypto";
+import jwt from 'jsonwebtoken';
+import { jwtConfig } from "../config/jwt.config.js";
+import ms from 'ms'
 
-export class AuthService {
+export default class AuthService {
 
-private pesquisadorRepo = appDataSource.getRepository(Pesquisador);
-private refreshRepo = appDataSource.getRepository(RefreshToken)
+    private repoRefresh = appDataSource.getRepository(RefreshToken);
+    private repoPesquisador = appDataSource.getRepository(Pesquisador);
 
-  async login(email: string, password: string) {
+    async login(email: string, senha: string) {
 
-    const pesquisador = await this.pesquisadorRepo.findOne({
-      where: { email },
-    });
+        const pesquisador = await this.repoPesquisador.findOne({
+            where: { email}
+        });
 
-    if (!pesquisador) {
-      throw new AppError(401, "Credenciais inválidas");
+        if(!pesquisador) {
+            throw new AppError(401, "Credências Inválidas")
+        }
+
+        // Se a senha que o usuário informou no login é igual a senha que está salva no bd
+        const senhasSaoIguais = await bcrypt.compare(senha, pesquisador.senha)
+
+        if (!senhasSaoIguais) {
+            throw new AppError(401, "Credênciais Inválidas")
+        }
+
+        const refreshToken = await this.createRefreshToken(pesquisador);
+
+        // Acess Token
+        const tokenAccess = this.generateAcessToken(pesquisador);
+
+        // Refresh Token
+        const tokenRefresh = this.generateRefreshToken(pesquisador, refreshToken.jti);
+
+        // Retorna os tokens
+        return { tokenAccess, tokenRefresh }
+
     }
 
-    const valid = await bcrypt.compare(password, pesquisador.senha);
+    private async createRefreshToken(pesquisador: Pesquisador) {
+        const token  = await this.repoRefresh.create({
+            jti: randomUUID(),
+            pesquisador: pesquisador
+        })
 
-    if (!valid) {
-      throw new AppError(401, "Credenciais inválidas");
+        return this.repoRefresh.save(token);
     }
 
-    const refreshToken = await this.createRefreshToken(pesquisador);
-    const accessToken = this.generateAccessToken(pesquisador);
-    const refreshTokenJwt = this.generateRefreshToken(pesquisador, refreshToken.jti)
-    return { accessToken, refreshToken:  refreshTokenJwt }
+    private async generateRefreshToken(pesq: Pesquisador, jti: string) {
 
-  }
+        const tokenPlan = jwt.sign(
+            {
+                sub: pesq.id,
+                jti: jti,
+                type: 'refresh'
+            },
+            jwtConfig.refresh.secret,
+            {
+                expiresIn: jwtConfig.refresh.expiresIn!
+            }
+        );
 
-  private generateAccessToken(user: Pesquisador) {
-  return jwt.sign(
-    {
-      sub: user.id,
-      email: user.email,
-      type: "access",
-    },
-    jwtConfig.access.secret,
-    {
-      expiresIn: jwtConfig.access.expiresIn!, 
+
+        const expireInMS = typeof jwtConfig.refresh.expiresIn === "string" ?
+         ms(jwtConfig.refresh.expiresIn) : jwtConfig.refresh.expiresIn! * 1000;
+
+         await this.repoRefresh.update({ jti }, {
+            tokenhash: await bcrypt.hash(tokenPlan, 12),
+            expireIn: new Date(Date.now() + expireInMS ),
+            revoked: false
+         })
+
+         return tokenPlan;
     }
-  );
-}
 
-private generateRefreshToken(user: Pesquisador, jti: string) {
-  return jwt.sign(
-    {
-      sub: user.id,
-      jti: jti,
-      type: "refresh",
-    },
-    jwtConfig.refresh.secret,
-    {
-      expiresIn: jwtConfig.refresh.expiresIn!,
+    private generateAcessToken(pesquisador: Pesquisador) {
+        return jwt.sign(
+            {
+                sub: pesquisador.id,
+                email: pesquisador.email,
+                type: "access"
+            },
+            jwtConfig.access.secret,
+            {
+                expiresIn: jwtConfig.access.expiresIn!
+            }
+        )
     }
-  );
-}
 
-  private async createRefreshToken(pesquisador: Pesquisador) {
-    const token = this.refreshRepo.create({
-        jti: randomUUID(),
-        pesquisador,
-    });
-
-    return this.refreshRepo.save(token);
-    }
 }

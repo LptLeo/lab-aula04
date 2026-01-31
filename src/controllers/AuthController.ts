@@ -1,55 +1,40 @@
 import type { Request, Response } from "express";
-import type { AuthService } from "../services/AuthService.js";
-import type { RefreshTokenService } from "../services/RefreshTokenService.js";
-import type { JwtPayload } from "jsonwebtoken";
-import type { LogoutService } from "../services/LogoutService.js";
-import jwt from "jsonwebtoken"
-import { jwtConfig } from "../config/jwt.config.js";
+import type AuthService from "../services/AuthService.js";
+import type LogoutService from "../services/LogoutService.js";
+import type RefreshTokenService from "../services/RefreshTokenService.js";
 
-export class AuthController {
+export default class AuthController {
 
-    private authService: AuthService;
-    private refreshTokenService: RefreshTokenService;
-    private logoutService: LogoutService
+    private autService: AuthService;
+    private logoutService: LogoutService;
+    private refreshService: RefreshTokenService;
 
-    constructor(authService: AuthService, refreshToken: RefreshTokenService, logoutService: LogoutService) {
-        this.authService = authService;
-        this.refreshTokenService = refreshToken;
-        this.logoutService =  logoutService;
+    constructor(authService: AuthService, logoutService: LogoutService, refreshService: RefreshTokenService) {
+        this.autService = authService;
+        this.logoutService = logoutService;
+        this.refreshService = refreshService;
     }
 
     async login(req: Request, res: Response) {
-        const { email, password } = req.body;
+        const { email, senha } = req.body;
 
-        const result = await this.authService.login(email, password)
-        res.status(200).json({ status: "success", data: result })
+        const tokens = this.autService.login(email, senha);
+        res.status(200).json({ tokens })
 
     }
 
-    async refresh(req: Request, res: Response) {
+    async refreshToken(req: Request, res: Response) {
         const { refreshToken } = req.body;
 
-        const result = await this.refreshTokenService.execute(refreshToken);
+        const tokens = await this.refreshService.refresh(refreshToken);
+        res.status(200).json({ tokens })
 
-        return res.status(200).json({ status: "success", data:  result})
     }
 
     async logout(req: Request, res: Response) {
         const { refreshToken } = req.body;
-
-        const payload = jwt.verify(
-            refreshToken,
-            jwtConfig.refresh.secret
-        ) as JwtPayload;
-
-        if(!payload?.jti) {
-            return res.status(400).json({  message: "Token inválido!"})
-        }
-
-        await this.logoutService.execute(payload.jti as string);
-
-        return res.status(204).json({})
-
+        await this.logoutService.logout(refreshToken);
+        res.status(200).json({ message: "Success" })
     }
 
 }
