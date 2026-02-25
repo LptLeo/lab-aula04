@@ -1,0 +1,152 @@
+FASE 1:
+
+1. Sua aplicação tem duas partes para rodar. Quais são elas ?
+	As duas partes para rodar estão definidas em serviços, seriam elas a 
+
+2. Uma parte depende da outra para funcionar. Qual depende de qual ? Por quê ?
+	A API depende do banco dados para funcionar porque precisa de dados para processar. Já o banco de dados precisa da API para que seus dados sejam processados.
+
+3. Se você fosse explicar para um amigo não técnico o que o docker-compose.yaml
+faz, o que diria em uma frase ?
+	docker-compose.yaml seria como um botão que liga vários dipositivos com apenas uma ativação, facilitando a inicialização.
+
+4. Sua API usa variáveis como DB_HOST e DB_PORT. De onde essas variáveis precisam
+vir quando rodar dentro do Docker ?
+	Elas vem de variáveis de ambiente externas ou internas. Se forem externas, importa-se com a propriedade env_file passando um ou mais arquivos. Se forem internas, usasse a propriedade environments e passa manualmente as variáveis de ambiente.
+
+Quebra 1: Troque o nome do serviço do banco de postgres para banco-de-dados mas
+mantenha DB_HOST=postgres no .env. Suba o compose. O que aconteceu? Por quê?
+	Ocorre um erro de dependência de serviço indefinido, o serviço postgres não foi encontrado. Isso acontece porque em depends_on, o serviço listado como dependência se chama postgres mas o que registrei não tem esse nome.
+
+Quebra 2: Remova o depends_on e suba novamente. Rode docker compose logs api
+nos primeiros 5 segundos. O que você vê?
+	A API conseguiu se conectar ao banco de dados. Mas isso acontece porque o depends_on apenas diz a *ordem de inicialização* dos serviços, assim carregando as dependencias antes dos dependentes.
+
+Quebra 3: Adicione 2 espaços extras de indentação em uma linha qualquer do arquivo. O que
+o Docker retorna? Consegue entender a mensagem de erro?
+	Espaços "extras" em branco não afetam a execução. Para isso acontecer é necessário um erro de sintaxe, que resultaria no funcionamento incorreto da aplicação.
+
+Reflexão obrigatória: Escreva com suas palavras, por que o nome do serviço no compose precisa bater com o DB_HOST do .env ? O que esse nome representa
+dentro da rede Docker?
+	Porque na rede interna do docker, os serviços se identificam pelo nome como endereço para um ip (DNS) ao invés de um ip direto.	
+
+
+FASE 2:
+
+1. Se o servidor reiniciar às 3 da manhã, os containers sobem sozinhos ou ficam parados
+esperando alguém ligar manualmente ?
+	Se os servidores (hardware) reiniciarem e os serviços(containers) estiverem configurados para iniciar automaticamente com o sistema, eles iniciarão sozinhos. Mas em caso de reinicio automático apenas dos serviços, eles dependerão da configuração (valor) escrito na propriedade restart no arquivo docker-compose.
+
+2. Se você rodar docker compose down e depois docker compose up de novo, os
+dados do banco continuam lá ou somem ?
+	Se houver volume configurado, haverá persistência de dados. Se não, eles se perdem ao desligar o serviço/container.
+
+3. docker ps mostra um nome estranho como reservaiot-postgres-1. Como você
+daria um nome previsível para cada container ?
+	Os nomes dos serviços devem representar o que eles são ou o que fazem para que sejam fáceis de entender, melhorando a legibilidade do código. São definidos pela propriedade container_name em cada serviço.
+	
+Quebra 1: Rode docker compose down -v (o -v apaga os volumes junto com os
+containers). Suba de novo e verifique os dados. O que aconteceu? Em que situação faria
+sentido usar esse comando?
+	Os dados foram apagados, e ao dar select para procura-los deu erro dizendo que os dados não existem. As situações que faria sentido usar esse comando seriam: Durante o desenvolvimento/manutenção de funcionalidades, em testes de software, em caso de corrupção de dados no banco de dados, ou troca de versão do banco de dados.
+
+Quebra 2: Remova o bloco volumes: do final do arquivo (a declaração global) mas mantenha
+o mapeamento dentro do serviço do postgres. Tente subir. O que o Docker retorna?
+	Retorna que o projeto compose é inválido porque o serviço postgres refere-se a um volume indefinido (que seria o volume global).
+
+Reflexão obrigatória: Explique com suas palavras a diferença entre um container
+e um volume. Por que os dados do banco não devem viver dentro do container?
+	Um Container é uma unidade isolada e passageira que empacota o código e suas dependências para garantir que a aplicação rode da mesma forma em qualquer lugar. Resultando em um software leve e que roda em qualquer lugar. Enquanto um Volume é uma unidade de armazenamento principalmente usada com containers para persistência de dados.
+	Os bancos de dados não devem viver dentro do container por ele ser passageiro, ou seja, destruirá os dados ao ser finalizado mesmo que durante reinicialização.
+
+
+FASE 3:
+
+Tem diferença entre um container estar "ligado" e estar "funcionando de verdade"?
+Pense num restaurante — ter a porta aberta é a mesma coisa que estar pronto para
+servir?
+	A diferença é que quando ele está ligado, não necessariamente está servindo para o propósito para o qual foi criado. Já quando está funcionando de verdade, ele está servindo ao seu propósito.
+
+2. Os logs do Docker crescem infinitamente no disco do servidor. Isso pode ser um
+problema? Como você resolveria?
+	Basicamente comprimindo e enviando os logs para nuvem mas excluindo-os após certo período de tempo. Mantendo-os apenas para caso necessário. Mas seria bom definir um tamanho máximo por arquivo de log e criar alguma forma de otimização de logs, descartando o que será desnecessário.
+
+3. O banco de dados está acessível por qualquer container Docker rodando na sua
+máquina — mesmo de outros projetos. Isso é seguro?
+	Não é seguro, o ideal é manter o padrão de acesso mínimo necessário. Ou seja, apenas quem precisa tem que ter o acesso.
+
+Quantas vezes a API tentou conectar no banco antes de conseguir? O que acontece quando o
+depends_on não espera o banco estar pronto de verdade?
+	Em meu teste, a API conectou na primeira tentativa porque o container postgres subiu rápido. Mas isso nem sempre acontece, por isso o healthcheck torna-se necessário principalmente em produção. Sem essa configuração, corre o risco da API subir mais rápido que o banco de dados e tentar conexão com o banco de forma falha, resultando em erro e interrupção do sistema. Mesmo que o sistema reinicie devido a propriedade restart com o valor unless-stopped, o depends_on: condition: service_healthy garante uma inicialização limpa, evitando reinicializações e erros desnecessários nos logs após o boot do sistema.
+	
+Reflexão obrigatória: Escreva a diferença entre depends_on: - postgres e
+depends_on: postgres: condition: service_healthy. Em qual situação
+o primeiro seria suficiente?
+	"depends_on: - postgres" diz que a API depende do funcionamento do serviço postgres para funcionar, fazendo com que o postgres inicie antes da API mas não garantindo que terminará a inicialização antes da API.
+	"depends_on: postgres: condition: service_healthy" diz que depende do serviço postgres na condição "healthy" (saudável), que garante que a API só inicie após o postgres TERMINAR sua inicialização.
+
+=====================================================
+=====================================================
+
+Pergunta 1.1 - O problema
+Você tem uma aplicação Node.js. Para rodar ela, qual é o requisito mínimo que qualquer
+computador precisa ter instalado ?
+Escreva sua resposta aqui: Instalar o nodejs e as dependências necessárias para rodar a aplicação.
+
+Pergunta 1.2 — A solução
+Se você precisasse "empacotar" sua aplicação para mandar para alguém rodar sem precisar
+instalar nada, o que você precisaria incluir nesse pacote?
+	Além do projeto em si, o principal arquivo seria o package.json e package-lock.json. Mas em caso de docker, criaria a imagem do projeto.
+	
+Pergunta 1.3 - A analogia
+Complete a frase com algo do seu dia a dia:
+
+	"Um container Docker é como um copo com um software porque ele roda o software apenas com o necessário, e sendo um copo também é portátil e contendo apenas o software, é leve."
+	
+Pergunta 1.4 - A receita
+Um Dockerfile é uma receita de como montar o ambiente da aplicação. Se você fosse escrever
+essa receita em português, quais seriam os passos?
+
+Escreva em português, sem nenhum comando Docker:
+- define e nomeia como uma variável a versão do node
+- define a área de trabalho
+- copia o arquivo de dependências para a raiz da área de trabalho
+- instala as dependências
+- copia o projeto para a área de trabalho
+- expõe na porta 3000
+- insere o comando que executa o script para iniciar o projeto
+
+Qual imagem você escolheu? Por que essa versão?
+	Escolhi a imagem alpine porque de acordo com minhas pesquisas, é o mais leve. Trazendo assim, ótima performace e leveza para meu container.
+
+A instrução é WORKDIR. Qual pasta você escolheria ? Por que ?
+
+Sua escolha: WORKDIR /app
+Motivo: Organização e padronização, o que melhora na manutenção, isolamento, segurança e previne sobrescrita. Separando a pasta de outros arquivos com propósitos diferentes.
+
+Sua aplicação tem um package.json. Antes de copiar o código todo, qual arquivo você
+copiaria primeiro para instalar as dependências ?
+	package.json para as dependências e package-lock.json para garantir o correto versionamento das dependências. Logo, copiaria os arquivos package*.json 
+
+Por que faz sentido copiar só esse arquivo antes de copiar o resto?
+	porque eles contem as dependências e versionamentos de dependências.
+	
+Pense: se você copiar tudo de uma vez e mudar uma linha do código, o Docker vai
+reinstalar todas as dependências do zero. Se você copiar só o package.json
+primeiro, o que muda ? Isso se chama "cache de camadas". Pesquise o que
+significa.
+	Quando se faz o build da aplicação no docker, ele armazena o resultado de cada instrução em um cache. E se rodar o build novamente sem nenhuma alteração de código, ele irá reutilizar o que já havia no cache e fazendo um carregamento mais rápido. Por isso a flag --build existe.
+
+Sua aplicação é TypeScript. O Node não executa TypeScript diretamente , ele executa
+JavaScript. O que precisa acontecer antes de rodar a aplicação ?
+	compilar o projeto.
+
+Qual comando transforma TypeScript em JavaScript no seu projeto?
+(Dica: olhe o package.json, seção "scripts")
+	"build" que executa um "npx tsc", compilando o projeto para JavaScript.
+
+Qual comando inicia sua aplicação depois que ela foi compilada?
+
+Instrução Docker: CMD ["node", "dist/server.js"]
+
+
