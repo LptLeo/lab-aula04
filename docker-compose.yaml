@@ -1,0 +1,58 @@
+name: reservaIoT
+
+services:
+  api-leo:
+    build: .
+    logging:
+      driver: "json-file" # formato padrão do Docker para armazenar logs
+      options:
+        max-size: "10m" # cada arquivo de log tem no máximo 10 megabytes
+        max-file: "3" # mantém no máximo 3 arquivos depois rotaciona e apaga o mais antigo
+    restart: unless-stopped
+    networks:
+      - internal # fala com o banco
+      - external # recebe tráfego de fora
+    container_name: typescript-aula
+    ports:
+      - "6060:6060"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      # "CMD-SHELL" executa o comando no shell do container
+      # "pg_isready" é o comando nativo do Postgres que verifica se está pronto
+      interval: 10s # verifica a cada 10 segundos
+      timeout: 5s # espera no máximo 5 segundos por resposta
+      retries: 5 # após 5 falhas seguidas, marca como "unhealthy"
+      start_period: 10s # nos primeiros 10s não conta falha (tempo para inicializar)
+    restart: unless-stopped
+    networks:
+      - internal # só fala com quem está na rede interna — nunca fica exposto
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    container_name: postgres
+    ports:
+      - "${DB_PORT}:5432"
+
+volumes:
+  postgres-data:
+
+
+networks:
+  internal:
+    driver: bridge
+    internal: true # containers nessa rede NÃO têm acesso à internet nem são acessíveis de fora
+  external:
+    driver: bridge # rede normal — a API fica exposta aqui
