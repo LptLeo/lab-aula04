@@ -149,4 +149,75 @@ Qual comando inicia sua aplicação depois que ela foi compilada?
 
 Instrução Docker: CMD ["node", "dist/server.js"]
 
+Por que CMD usa uma lista ["node", "dist/index.js"] em vez de uma
+string "node dist/index.js"? Pesquise a diferença entre CMD formato exec e
+CMD formato shell.
+	Shell é um intermediário mais "inteligente" (entendendo atalhos). Funciona como um escudo entre o sistema e o programa. Ele não repassa sinais de desligamento, fazendo com que o Docker force a parada do container após alguns segundos, podendo corromper arquivos.
+	Exec lida diretamente com o kernel. Não entende atalhos como o Shell, mas ele garante que o programa receba ordens de parada, fazendo com que o processo feche de forma correta e segura, evitando corrupção de dados.
 
+Quebra 1 — Retire o WORKDIR
+Delete a linha WORKDIR do seu Dockerfile. Tente buildar e rodar.
+
+O que aconteceu?
+	Ocorreu um erro ao rodar o npm install. O erro acontece porque sem o WORKDIR, o Docker usa a pasta raiz do sistema como padrão. Tentar instalar o node_modules na raiz geralmente causa falhas de permissão ou conflitos com o próprio Linux, impedindo a conclusão do build.
+
+Por que o WORKDIR importa?
+	Porque define onde o Docker irá trabalhar e rodar o projeto. Garantindo que todos os comandos seguintes tenham uma pasta segura e isolada. Além de evitar bagunça na raiz do sistema.
+
+Quebra 2 — Inverta a ordem do COPY
+Mova o COPY . . para antes do COPY package*.json ./. Rebuilde a imagem. Agora
+mude qualquer coisa no código (adicione um comentário) e rebuilde novamente.
+
+O que você notou na segunda vez que buildou?
+	Novamente um erro, devido a inversão dos comandos COPY.
+
+Isso te mostra por que a ordem importa?
+	Sim, a ordem diferente pode impedir o build correto.
+
+Delete a linha CMD. Construa a imagem e tente rodar o container:
+
+docker run minha-app:v1
+
+O que aconteceu?
+	Ao tentar rodar a aplicação, ela trava porque não encontrou o banco de dados já que o comando "Docker run minha-app:v1" roda apenas o Dockerfile isolado, logo, o banco de dados não está rodando junto.
+
+O que o CMD faz de verdade?
+	O CMD executa o comando final para rodar a aplicação compilada. No caso, o arquivo server.js.
+
+Quebra 4 — Use uma imagem errada
+Mude FROM node:20-alpine para FROM python:3.11-alpine. Tente buildar.
+
+Qual foi o erro?
+	Ocorreu um erro ao tentar um dos comandos do nodejs. "RUN npm install". Para buildar seria necessário a imagem node.
+
+O que isso te ensina sobre a imagem base?
+	Para JavaScript rodar localmente, ele precisa do nodejs que interpreta-o. A imagem base define todas as ferramentas disponíveis dentro do container, e já que NODE não foi uma delas, não foi possível construir a imagem.
+
+Checkpoint da Etapa 1
+Responda antes de avançar para a Etapa 2. Se não conseguir responder sem olhar o arquivo,
+você ainda não está pronto.
+
+1. O que é uma imagem Docker? (explique sem usar a palavra "imagem")
+	É algo como uma instrução com pacote, contendo todo o necessário para rodar e como rodar a aplicação dentro dessa junção de instrução-pacote. 
+
+2. Por que copiamos o package.json antes do resto do código?
+	Para que torne possível a execução do npm install, instalando (ou buscando no cache) as dependências do projeto.
+
+3. Qual a diferença entre imagem e container?
+	A imagem é a receita de bolo (estático), enquanto o container é o bolo feito (em execução).
+
+4. Se você precisasse explicar o Dockerfile para um amigo em 3 frases,
+o que você diria?
+	Dockerfile é uma sequência de instruções.
+	A automação da criação de uma imagem Docker.
+	A pré-definição das configurações, comandos e dependências necessárias.
+
+Reflexão Final
+Antes de fechar o computador, escreva:
+
+1. Qual foi o momento em que você mais travou? O que te desbloqueou?
+	Acho que foi nas partes de pesquisa, as vezes é difícil entender algumas coisas complexas, mas ao pesquisar a fundo sempre dá certo.
+2. O que você entende agora que não entendia quando começou?
+	Entendo a difereça do CMD Shell para o CMD Exec.
+3. Se você precisasse dockerizar outro projeto amanhã, por onde começaria?
+	Seguiria o passo a passo da "receita": Escolher a imagem certa, definir WORKDIR para organizar, copiar os arquivos de dependência e instala-los, definir um comando com CMD para iniciar a aplicação. Usaria se necessário, docker compose para automatizar a inicialização e configuração dos containers.
